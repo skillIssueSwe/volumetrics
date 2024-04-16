@@ -363,6 +363,72 @@ impl VxSwapchain {
     }
 }
 
+struct VxPools {
+    graphics_pool: vk::CommandPool,
+    transfer_pool: vk::CommandPool,
+    compute_pool: vk::CommandPool,
+}
+
+impl VxPools {
+    fn init(
+        logical_device: &ash::Device,
+        queue_families: &QueueFamilies,
+    ) -> Result<VxPools, vk::Result> {
+        let graphics_pool_info = vk::CommandPoolCreateInfo::default()
+            .queue_family_index(queue_families.graphics_q_index.unwrap())
+            .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
+        let graphics_pool = unsafe {
+            logical_device.create_command_pool(&graphics_pool_info, None)?
+        };
+
+        let transfer_pool_info = vk::CommandPoolCreateInfo::default()
+            .queue_family_index(queue_families.transfer_q_index.unwrap())
+            .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
+        let transfer_pool = unsafe {
+            logical_device.create_command_pool(&transfer_pool_info, None)?
+        };
+
+        let compute_pool_info = vk::CommandPoolCreateInfo::default()
+            .queue_family_index(queue_families.compute_q_index.unwrap())
+            .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
+
+        let compute_queue = unsafe {
+            logical_device.create_command_pool(&compute_pool_info, None)?
+        };
+
+        Ok(VxPools {
+            graphics_pool,
+            transfer_pool,
+            compute_pool,
+        })
+    }
+
+    fn cleanup(&self, logical_device: &ash::Device) {
+        unsafe {
+            logical_device.destroy_command_pool(self.graphics_pool, None);
+            logical_device.destroy_command_pool(self.transfer_pool, None);
+            logical_device.destroy_command_pool(self.compute_pool, None);
+        }
+    }
+}
+
+fn fill_commandbufs(
+    commandbuf: &Vec<vk::CommandBuffer>,
+    logical_device: &ash::Device,
+    renderpass: &vk::RenderPass,
+) {}
+
+fn create_command_buffers(
+    logical_device: &ash::Device,
+    pools: &VxPools,
+    amount: usize,
+) -> Result<Vec<vk::CommandBuffer>, vk::Result> {
+    let commandbuf_allocate_info = vk::CommandBufferAllocateInfo::default()
+        .command_pool(pools.graphics_pool)
+        .command_buffer_count(amount as u32);
+    unsafe { logical_device.allocate_command_buffers(&commandbuf_allocate_info) }
+}
+
 
 struct Renderer {
     window: winit::window::Window,
@@ -450,16 +516,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ..
             } => {
                 elwt.exit();
-            },
+            }
             Event::AboutToWait => {
                 renderer.window.request_redraw();
-            },
+            }
             Event::WindowEvent {
                 event: WindowEvent::RedrawRequested,
                 ..
             } => {
                 //render here
-            },
+            }
             _ => ()
         }
     });
