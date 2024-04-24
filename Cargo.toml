@@ -14,7 +14,8 @@ png = "0.17" # loading texture pngs
 pretty_env_logger = "0.5" # console print
 thiserror = "1" # custom error type helper lib
 winit = { version = "0.29.15", features = ["default", "rwh_05"]}
-ash-window = "0.13.0"
-raw-window-handle = "0.6.0"
 lazy_static = "1.4.0"
-
+vk-shader-macros = "0.2.2"
+vulkano = "*"
+vulkano-shaders = "*"
+vulkano-util = "*"
