@@ -1,44 +1,57 @@
-mod VxContext;
-
 use std::error::Error;
 use std::sync::Arc;
-use std::time::Instant;
-use vulkano as vlk;
-use vulkano_util as vlku;
-use vulkano_util::context::VulkanoConfig;
-use vulkano_util::renderer::DEFAULT_IMAGE_FORMAT;
-use vulkano_util::window::VulkanoWindows;
-use winit::event_loop::ControlFlow;
+use std::time::{Duration, Instant};
+use vulkano::descriptor_set::DescriptorBindingResources::ImageView;
 
+use vulkano::device::Queue;
+use vulkano::image::ImageUsage;
+use vulkano::memory::allocator::StandardMemoryAllocator;
+use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass};
+use vulkano::swapchain::PresentMode;
+use vulkano::sync::GpuFuture;
+use winit::event::{Event, WindowEvent};
+use winit::event_loop::{ControlFlow, EventLoop, EventLoopWindowTarget};
 
-fn main() -> Result<(), impl Error>{
+use engine::Engine;
+use vulkano_util::context::{VulkanoConfig, VulkanoContext};
+use vulkano_util::renderer::{DEFAULT_IMAGE_FORMAT, VulkanoWindowRenderer};
+use vulkano_util::window::{VulkanoWindows, WindowDescriptor};
 
+mod vulkano_util;
+mod engine;
+mod shaders;
+mod perframe_compute;
+mod perframe_render;
+
+fn main() {
+    let render_module = RenderModule::default();
+    render_module.launch();
 }
 
-struct RenderModule<'a>{
-    event_loop: winit::event_loop::EventLoop<()>,
-    vcontext: vlku::context::VulkanoContext,
-    windows: vlku::window::VulkanoWindows,
+pub struct RenderModule<'a> {
+    event_loop: EventLoop<()>,
+    windows: VulkanoWindows,
     render_target_id: usize,
-    primary_window_renderer: &'a vlku::renderer::VulkanoWindowRenderer,
-    graphics_q: &'a Arc<vlk::device::Queue>,
-    compute_q: &'a Arc<vlk::device::Queue>,
-    // app
-    compute_engine: ComputeEngine
+    primary_window_renderer: &'a VulkanoWindowRenderer,
+    queue: &'a Arc<Queue>,
+    engine: Engine,
+    current_image: Some(Arc<ImageView>),
 }
 
 impl RenderModule {
-    fn new() -> Self {
-        let event_loop = winit::event_loop::EventLoopWindowTarget::new().unwrap();
-        let context = vlku::context::VulkanoContext::new(VulkanoConfig::default());
+    pub fn new(
+        window_title: &str,
+    ) -> Self {
+        let event_loop = winit::event_loop::EventLoop::new().unwrap();
+        let context = VulkanoContext::new(VulkanoConfig::default());
         let mut windows = VulkanoWindows::default();
         let render_target_id = 0;
         let _id = windows.create_window(
             &event_loop,
             &context,
-            &vlku::window::WindowDescriptor {
-                title: "default".to_string(),
-                present_mode: vlk::swapchain::PresentMode::Fifo,
+            &WindowDescriptor {
+                title: window_title.to_string(),
+                present_mode: PresentMode::Fifo,
                 width: 4000.,
                 height: 4000.,
                 ..Default::default()
@@ -47,98 +60,132 @@ impl RenderModule {
         );
 
         let primary_window_renderer = windows.get_primary_renderer_mut().unwrap();
+
         primary_window_renderer.add_additional_image_view(
             render_target_id,
             DEFAULT_IMAGE_FORMAT,
-            vlk::image::ImageUsage::SAMPLED
-                | vlk::image::ImageUsage::TRANSFER_DST
-                | vlk::image::ImageUsage::STORAGE
+            ImageUsage::SAMPLED
+                | ImageUsage::TRANSFER_DST
+                | ImageUsage::STORAGE,
         );
 
         let graphics_q = context.graphics_queue();
 
-        let mut compute_engine = ComputeEngine::new(
+        let mut engine = Engine::new(
             graphics_q.clone(),
             primary_window_renderer.swapchain_format(),
-            primary_window_renderer.swapchain_image_views()
+            primary_window_renderer.swapchain_image_views(),
         );
         Self {
             event_loop,
-            vcontext: context,
             windows,
             render_target_id,
             primary_window_renderer,
-            graphics_q,
-            compute_q: context.compute_queue(),
-            compute_engine
+            queue,
+            engine,
+            current_image: None
         }
     }
 
-    fn launch(mut self) -> Result<(), impl Error> {
+    fn launch(mut self)  {
+
+        // TODO Run prepass shaders here
+
         self.event_loop.run(move |event, elwt| {
             elwt.set_control_flow(ControlFlow::Poll);
-            let renderer = self.windows.get_primary_renderer_mut(); // TODO see if we can remove this
+            let renderer = self.windows.get_primary_renderer_mut().unwrap(); // TODO see if we can remove this
 
-            match on_event(renderer, &event, &mut self.compute_engine, self.render_target_id) {
-
+            if self.on_event(renderer, &event) {
+                elwt.exit();
+                return;
             }
+
+            self.engine.consume_input();
         })
     }
 
-    // Random thought, try using graphics queue to get render_target
+    pub fn on_event(
+        &mut self,
+        renderer: &mut VulkanoWindowRenderer,
+        event: &Event<()>,
+    ) -> bool {
+        match &event {
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
+                return true;
+            }
+            Event::WindowEvent {
+                event: WindowEvent::Resized(..) | WindowEvent::ScaleFactorChanged { .. },
+                ..
+            } => renderer.resize(),
+            Event::WindowEvent {
+                event: WindowEvent::RedrawRequested,
+                ..
+            } => 'redraw: {
+                // TODO Tasks to redraw:
+                // 1. consume new state to application
+                // 2. Compute
+                // 3. Render
+                // 4. Update things that need to be ready for next run
+                // ie. ensure state is correctly consumed - whatever
 
-
-    fn on_event(
-        renderer: &mut vlku::renderer::VulkanoWindowRenderer,
-        event: &winit::event::Event<()>,
-        compute_engine: &mut ComputeEngine,
-        render_target_id: usize,
-    )
-}
-
-struct ComputeEngine {
-    compute_pipeline: VxComputePipeline,
-
-    render_frame_pass: RenderFramePass,
-    state: ComputeEngineState,
-    time_state: ComputeEngineTime,
-    input_state: MouseInputState,
-}
-
-impl ComputeEngine {
-    fn new(
-        main_q: Arc<vlk::device::Queue>,
-        image_format: vlk::format::Format,
-        swapchain_image_views: &[Arc<vlk::image::view::ImageView>]
-    ) -> Self {
-
-        Self {
-
+                // Handle minimization
+                match renderer.window_size() {
+                    [width, height] => {
+                        if width == 0.0 || height == 0.0 {
+                            break 'redraw;
+                        }
+                    }
+                }
+                // TODO Update engine.rs state
+                self.engine.consume_input_state();
+                // TODO engine.rs compute
+                self.render_frame(renderer);
+                // TODO update time
+            }
+            Event::AboutToWait => renderer.window().request_redraw(),
+            _ => (),
         }
+        false
+        // !compute_engine.instatiated();
+    }
+
+    fn render_frame(
+        &mut self,
+        renderer: &mut VulkanoWindowRenderer,
+    ) {
+        let before_pipeline_future =
+            match renderer.acquire(Some(Duration::from_millis(1)), |swapchain_image_views| {
+                self.engine.recreate_framebufs(swapchain_image_views)
+            }) {
+                Err(e) => {
+                    println!("{e}");
+                    return;
+                }
+                Ok(future) => future,
+            };
+
+        self.current_image = renderer.get_additional_image_view(self.render_target_id.clone());
+        let computepass_future = self.engine.compute_frame(self.current_image.clone())
+                                .join(before_pipeline_future);
+
+        let renderpass_future = self.engine.render(
+            computepass_future,
+            self.current_image.clone(),
+            renderer.swapchain_image_view(),
+            renderer.image_index()
+        );
+
+        renderer.present(renderpass_future, true);
     }
 }
-struct MouseInputState {
 
-}
-
-// Hold stuff that isnt input or time
-struct ComputeEngineState {
-
-}
-
-struct ComputeEngineTime {
-    time: Instant,
-    dt: f32,
-    dt_sum: f32,
-    frame_cnt: f32,
-    avg_fps: f32,
+impl Default for RenderModule {
+    fn default() -> Self {
+        RenderModule::new("default")
+    }
 }
 
 
-struct RenderFramePass {
-
-}
-
-struct VxComputePipeline {
-
-}
