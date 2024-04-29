@@ -1,4 +1,6 @@
+use std::collections::HashMap;
 use std::error::Error;
+use std::hash::Hash;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -13,8 +15,7 @@ use vulkano::memory::allocator::StandardMemoryAllocator as StdMemoryAlloc;
 use vulkano::sync::GpuFuture;
 use winit::event;
 use winit::event::{ElementState, Event, KeyEvent};
-use winit::keyboard::{Key, NamedKey};
-
+use winit::keyboard::{Key, KeyCode, NamedKey};
 use crate::perframe_compute::PerframeCompute;
 use crate::perframe_render::PerframeRender;
 use crate::vulkano_util::window::WindowDescriptor;
@@ -101,30 +102,12 @@ impl Engine {
         self.perframe_render.recreate_framebufs(swapchain_image_views)
     }
 
-    fn on_event(&mut self, window_size: Vec2, event: &Event<()>) {
-        self.state.window_size = window_size;
-        if let Event::WindowEvent { event, .. } = event {
-            match event {
-                WindowEvent::KeyboardInput { event, .. } => self.on_keyboard_event(event),
-                event::DeviceEvent::MouseMotion { delta, .. } => self.on_mouse_motion(delta),
-                _ => {}
-            }
-        }
-    }
-
-    fn on_keyboard_event(&self, event: &KeyEvent) {
-        match event.logical_key.as_ref() {
-            Key::Named(NamedKey::Escape) => self.should_quit = state_is_pressed(event.state)
-        }
-    }
-
-    fn on_mouse_motion(&self, position: &(f64, f64)) {
-        todo!()
+    pub(crate) fn on_input_event(&mut self, window_size: [f32; 2], event: &Event<()>) {
+        self.input_state.handle_input_event(window_size, event);
     }
 }
 
-fn key_event_is_pressed(state: ElementState) -> bool {
-
+fn is_key_event_pressed(state: ElementState) -> bool {
     match state {
         ElementState::Pressed => true,
         ElementState::Released => false
@@ -158,8 +141,11 @@ impl VoxelSceneConfig {
 
 // Meant to be consumed
 struct InputState {
+    window_size: [
+        f32;2
+    ],
     mouse_move_delta: (f32, f32),
-    should_quit: bool,
+    keys_state: HashMap<Keys, bool>,
 }
 
 impl InputState {
@@ -170,13 +156,37 @@ impl InputState {
         self.mouse_move_delta = (0., 0.);
         Ok(())
     }
+
+    fn on_keyboard_event(&mut self, event: &KeyEvent) {
+        match event.logical_key.as_ref() {
+            Key::Named(NamedKey::Escape) => { self.keys_state.insert(Keys::ESC, is_key_event_pressed(event.state)); },
+            Key::Character("w") => { self.keys_state.insert(Keys::W, is_key_event_pressed(event.state)); }
+            Key::Character("a") => { self.keys_state.insert(Keys::A, is_key_event_pressed(event.state)); }
+            Key::Character("s") => { self.keys_state.insert(Keys::S, is_key_event_pressed(event.state)); }
+            Key::Character("d") => { self.keys_state.insert(Keys::d, is_key_event_pressed(event.state)); }
+            _ => ()
+        }
+    }
+
+    fn on_mouse_event() {}
+
+    fn handle_input_event(&mut self, window_size:[f32; 2], event: &Event<()>) {
+        self.window_size = window_size;
+        if let Event::WindowEvent { event, .. } = event {
+            match event {
+                WindowEvent::KeyboardInput { event, .. } => self.on_keyboard_event(event),
+                event::DeviceEvent::MouseMotion { delta, .. } => self.on_mouse_input(Keys::MOUSE(delta)),
+                _ => {}
+            }
+        }
+    }
 }
 
 impl Default for InputState {
     fn default() -> Self {
         Self {
-            mouse_move_delta: (0.,0.),
-            should_quit: false
+            mouse_move_delta: (0., 0.),
+            keys_state: HashMap::from([(Keys::ESC, false), (Keys::W, false), (Keys::A, false), (Keys::S, false), (Keys::D, false)])
         }
     }
 }
@@ -186,7 +196,7 @@ impl Default for InputState {
 pub(crate) struct EngineState {
     cam_position: Vec3,
     cam_angles: Vec3,
-    window_size: Vec2,
+    window_size: [f32; 2],
     velocity: f32,
 }
 
@@ -195,7 +205,7 @@ impl Default for EngineState {
         Self {
             cam_position: vec3(0., 0., 0.),
             cam_angles: vec3(0., 0., 0.),
-            window_size: vec2(WindowDescriptor::default().width, WindowDescriptor::default().height),
+            window_size: [WindowDescriptor::default().width, WindowDescriptor::default().height],
             velocity: f32::default(),
         }
     }
@@ -231,3 +241,11 @@ impl Default for VoxelSceneConfig {
     }
 }
 
+enum Keys {
+    MOUSE((f64,f64)),
+    W,
+    A,
+    S,
+    D,
+    ESC
+}

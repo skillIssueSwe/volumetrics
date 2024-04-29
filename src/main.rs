@@ -100,7 +100,7 @@ impl RenderModule {
                 return;
             }
 
-            self.engine.consume_input();
+            self.engine.on_event(renderer.window_size(), &event);
         })
     }
 
