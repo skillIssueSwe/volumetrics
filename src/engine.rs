@@ -163,7 +163,7 @@ impl InputState {
             Key::Character("w") => { self.keys_state.insert(Keys::W, is_key_event_pressed(event.state)); }
             Key::Character("a") => { self.keys_state.insert(Keys::A, is_key_event_pressed(event.state)); }
             Key::Character("s") => { self.keys_state.insert(Keys::S, is_key_event_pressed(event.state)); }
-            Key::Character("d") => { self.keys_state.insert(Keys::d, is_key_event_pressed(event.state)); }
+            Key::Character("d") => { self.keys_state.insert(Keys::D, is_key_event_pressed(event.state)); }
             _ => ()
         }
     }
@@ -175,7 +175,7 @@ impl InputState {
         if let Event::WindowEvent { event, .. } = event {
             match event {
                 WindowEvent::KeyboardInput { event, .. } => self.on_keyboard_event(event),
-                event::DeviceEvent::MouseMotion { delta, .. } => self.on_mouse_input(Keys::MOUSE(delta)),
+                // TODO event::DeviceEvent::MouseMotion { delta, .. } => self.on_mouse_input(),
                 _ => {}
             }
         }
@@ -185,6 +185,7 @@ impl InputState {
 impl Default for InputState {
     fn default() -> Self {
         Self {
+            window_size: [1920f32, 1080f32],
             mouse_move_delta: (0., 0.),
             keys_state: HashMap::from([(Keys::ESC, false), (Keys::W, false), (Keys::A, false), (Keys::S, false), (Keys::D, false)])
         }
@@ -241,8 +242,8 @@ impl Default for VoxelSceneConfig {
     }
 }
 
+#[derive(Eq, Hash, PartialEq)]
 enum Keys {
-    MOUSE((f64,f64)),
     W,
     A,
     S,

@@ -1,16 +1,15 @@
 use std::error::Error;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
-use vulkano::descriptor_set::DescriptorBindingResources::ImageView;
+use std::time::Duration;
 
+use noise::NoiseFn;
+use vulkano::descriptor_set::DescriptorBindingResources::ImageView;
 use vulkano::device::Queue;
 use vulkano::image::ImageUsage;
-use vulkano::memory::allocator::StandardMemoryAllocator;
-use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass};
 use vulkano::swapchain::PresentMode;
 use vulkano::sync::GpuFuture;
 use winit::event::{Event, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoop, EventLoopWindowTarget};
+use winit::event_loop::{ControlFlow, EventLoop};
 
 use engine::Engine;
 use vulkano_util::context::{VulkanoConfig, VulkanoContext};
@@ -22,10 +21,13 @@ mod engine;
 mod shaders;
 mod perframe_compute;
 mod perframe_render;
+mod brickmap;
 
 fn main() {
-    let render_module = RenderModule::default();
-    render_module.launch();
+
+
+    // let render_module = RenderModule::default();
+    // render_module.launch();
 }
 
 pub struct RenderModule<'a> {
@@ -35,10 +37,9 @@ pub struct RenderModule<'a> {
     primary_window_renderer: &'a VulkanoWindowRenderer,
     queue: &'a Arc<Queue>,
     engine: Engine,
-    current_image: Some(Arc<ImageView>),
 }
 
-impl RenderModule {
+impl<'a> RenderModule<'a> {
     pub fn new(
         window_title: &str,
     ) -> Self {
@@ -81,13 +82,12 @@ impl RenderModule {
             windows,
             render_target_id,
             primary_window_renderer,
-            queue,
+            queue: graphics_q,
             engine,
-            current_image: None
         }
     }
 
-    fn launch(mut self)  {
+    fn launch(mut self) {
 
         // TODO Run prepass shaders here
 
@@ -167,22 +167,22 @@ impl RenderModule {
                 Ok(future) => future,
             };
 
-        self.current_image = renderer.get_additional_image_view(self.render_target_id.clone());
-        let computepass_future = self.engine.compute_frame(self.current_image.clone())
-                                .join(before_pipeline_future);
+        let current_image = renderer.get_additional_image_view(self.render_target_id.clone());
+        let computepass_future = self.engine.compute_frame(current_image.clone())
+                                     .join(before_pipeline_future);
 
         let renderpass_future = self.engine.render(
             computepass_future,
-            self.current_image.clone(),
+            current_image,
             renderer.swapchain_image_view(),
-            renderer.image_index()
+            renderer.image_index(),
         );
 
         renderer.present(renderpass_future, true);
     }
 }
 
-impl Default for RenderModule {
+impl <'a> Default for RenderModule <'a> {
     fn default() -> Self {
         RenderModule::new("default")
     }

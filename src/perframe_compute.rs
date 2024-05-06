@@ -60,14 +60,14 @@ impl PerframeCompute {
             scene_config: VoxelSceneConfig::default()
         }
     }
-
-    pub fn compute(
+// TODO
+/*    pub fn compute(
         &self,
         image_view: Arc<ImageView>,
         engine_state: EngineState,
     ) -> Box<dyn GpuFuture> {
 
     }
-}
+*/}
 
 

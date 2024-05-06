@@ -10,7 +10,7 @@ use vulkano::{
     Validated, VulkanError,
 };
 use winit::window::Window;
-use crate::context::VulkanoContext;
+use crate::vulkano_util::context::VulkanoContext;
 
 /// Most common image format
 pub const DEFAULT_IMAGE_FORMAT: Format = Format::R8G8B8A8_UNORM;
@@ -45,7 +45,7 @@ impl VulkanoWindowRenderer {
     pub fn new(
         vulkano_context: &VulkanoContext,
         window: Window,
-        descriptor: &crate::window::WindowDescriptor,
+        descriptor: &crate::vulkano_util::window::WindowDescriptor,
         swapchain_create_info_modify: fn(&mut SwapchainCreateInfo),
     ) -> VulkanoWindowRenderer {
         let window = Arc::new(window);
@@ -80,7 +80,7 @@ impl VulkanoWindowRenderer {
     fn create_swapchain(
         device: Arc<Device>,
         window: &Arc<Window>,
-        window_descriptor: &crate::window::WindowDescriptor,
+        window_descriptor: &crate::vulkano_util::window::WindowDescriptor,
         swapchain_create_info_modify: fn(&mut SwapchainCreateInfo),
     ) -> (Arc<Swapchain>, Vec<Arc<ImageView>>) {
         let surface = Surface::from_window(device.instance().clone(), window.clone()).unwrap();
